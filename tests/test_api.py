@@ -1,10 +1,59 @@
-def test_get_api(playwright):
+import pytest
+from playwright.sync_api import Playwright
+
+
+BASE_URL = "https://dummyjson.com"
+
+
+# Generate Bearer Token
+def get_auth_token(playwright):
 
     request = playwright.request.new_context(
-        base_url="https://dummyjson.com"
+        base_url=BASE_URL
     )
 
-    response = request.get("/users/2")
+    login_payload = {
+        "username": "emilys",
+        "password": "emilyspass"
+    }
+
+    response = request.post(
+        "/auth/login",
+        data=login_payload,
+        headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status == 200
+
+    token = response.json()["accessToken"]
+
+    request.dispose()
+
+    return token
+
+
+# Create authenticated request context
+@pytest.fixture
+def api_request(playwright):
+
+    token = get_auth_token(playwright)
+
+    request = playwright.request.new_context(
+        base_url=BASE_URL,
+        extra_http_headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+    )
+
+    yield request
+
+    request.dispose()
+
+
+def test_get_api(api_request):
+
+    response = api_request.get("/users/2")
 
     assert response.status == 200
 
@@ -14,7 +63,6 @@ def test_get_api(playwright):
 
     assert json_data["id"] == 2
 
-    request.dispose()
 
 def test_post_api(api_request):
 
@@ -37,6 +85,7 @@ def test_post_api(api_request):
 
     assert json_data["firstName"] == "Alice"
 
+
 def test_put_api(api_request):
 
     payload = {
@@ -58,6 +107,7 @@ def test_put_api(api_request):
 
     assert json_data["firstName"] == "Emily Updated"
 
+
 def test_patch_api(api_request):
 
     payload = {
@@ -77,11 +127,10 @@ def test_patch_api(api_request):
 
     assert json_data["age"] == 35
 
+
 def test_delete_api(api_request):
 
-    response = api_request.delete(
-        "/users/2"
-    )
+    response = api_request.delete("/users/2")
 
     assert response.status == 200
 
